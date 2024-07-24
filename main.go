@@ -3,36 +3,16 @@ package main
 import (
 	"bufio"
 	"fmt"
-	"log"
 	"os/exec"
 	"regexp"
 	"strings"
 	"time"
-	"wifi/internal/models"
+	"wifi/internal/services"
 
 	"github.com/rivo/tview"
 )
 
 const Refresh = 1 * time.Second
-
-// Function to get WiFi stats
-func getWiFiInfo() (*models.WifiConnection, error) {
-	cmd := exec.Command("iwconfig")
-	stdout, err := cmd.Output()
-	if err != nil {
-		return nil, err
-	}
-
-	scanner := bufio.NewScanner(strings.NewReader(string(stdout)))
-
-	// Create the network
-	wifiConnection, err := models.NewFromScanner(scanner)
-	if err != nil {
-		log.Printf("error creating network: %v", err)
-	}
-
-	return wifiConnection, nil
-}
 
 // Function to scan WiFi networks
 func scanWiFiNetworks() ([]map[string]string, error) {
@@ -124,10 +104,14 @@ func main() {
 		AddItem(tabList, 0, 1, true).
 		AddItem(pages, 0, 3, false)
 
+	// Create services
+	wifiConnectionService := services.NewWifiConnectionService()
+	networkService := services.NewNetworkService()
+
 	// Update WiFi stats periodically
 	go func() {
 		for {
-			wifiConnection, err := getWiFiInfo()
+			wifiConnection, err := wifiConnectionService.GetWiFiInfo()
 			if err != nil {
 				fmt.Fprintf(wifiStatsView, "[red]Error: %s", err)
 				app.Draw()
@@ -148,7 +132,7 @@ func main() {
 	// Update WiFi networks periodically
 	go func() {
 		for {
-			networks, err := scanWiFiNetworks()
+			networks, err := networkService.ListAvailableNetworks()
 			if err != nil {
 				fmt.Fprintf(wifiNetworksView, "[red]Error: %s", err)
 				app.Draw()
@@ -158,9 +142,10 @@ func main() {
 			wifiNetworksView.Clear()
 			fmt.Fprintf(wifiNetworksView, "[yellow]Available WiFi Networks\n\n")
 			for _, network := range networks {
-				fmt.Fprintf(wifiNetworksView, "[yellow]ESSID: [white]%s\n", network["ESSID"])
-				fmt.Fprintf(wifiNetworksView, "[yellow]Signal Level: [white]%s dBm\n", network["Signal Level"])
-				fmt.Fprintf(wifiNetworksView, "[yellow]Link Quality: [white]%s\n\n", network["Link Quality"])
+				fmt.Fprintf(wifiNetworksView, "[yellow]ESSID: [white]%s\n", network.ESSID)
+				fmt.Fprintf(wifiNetworksView, "[yellow]Signal Level: [white]%s dBm\n", network.SignalLevel)
+				fmt.Fprintf(wifiNetworksView, "[yellow]Link Quality: [white]%s\n", network.LinkQuality)
+				fmt.Fprintf(wifiNetworksView, "[yellow]MAC: [white]%s\n\n", network.MACAddress)
 			}
 
 			time.Sleep(Refresh)

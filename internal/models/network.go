@@ -4,52 +4,63 @@ import (
 	"bufio"
 	"fmt"
 	"regexp"
+	"strings"
 )
 
-var reSSID = regexp.MustCompile(`ESSID:"(.*?)"`)
-var reSignal = regexp.MustCompile(`Signal level=(-?\d+) dBm`)
-var reQuality = regexp.MustCompile(`Link Quality=(\d+)/(\d+)`)
-var reRetries = regexp.MustCompile(`Tx excessive retries:(\d+)`)
+var networkRegexSSID = regexp.MustCompile(`ESSID:"(.*?)"`)
+var networkRegexSignal = regexp.MustCompile(`Signal level=(-?\d+) dBm`)
+var networkRegexQuality = regexp.MustCompile(`Quality=(\d+)/(\d+)`)
+var networkRegexMAC = regexp.MustCompile(`Address: ([\da-fA-F:]+)`)
 
-//------------------------------------------------------------------------------
+// -----------------------------------------------------------------------------
 // Structure
-//------------------------------------------------------------------------------
+// -----------------------------------------------------------------------------
 
-// WifiConnection represents a Wifi connection.
-type WifiConnection struct {
+type Network struct {
 	ESSID       string
 	SignalLevel string
+	MACAddress  string
 	LinkQuality string
-	TxRetries   string
 }
 
-//------------------------------------------------------------------------------
+// -----------------------------------------------------------------------------
 // Factory
-//------------------------------------------------------------------------------
+// -----------------------------------------------------------------------------
 
-// NewFromScanner creates a new Network instance from a budio scanner.
-func NewFromScanner(scanner *bufio.Scanner) (*WifiConnection, error) {
-	wifiConnection := &WifiConnection{}
+// NewNetworkFromScanner creates a new Network instance from a budio scanner.
+func NewNetworkFromScanner(scanner *bufio.Scanner) ([]*Network, error) {
+	var networks []*Network
 
+	var currentNetwork *Network
 	for scanner.Scan() {
 		line := scanner.Text()
-		if match := reSSID.FindStringSubmatch(line); match != nil {
-			wifiConnection.ESSID = match[1]
+		if strings.Contains(line, "Cell") {
+			if currentNetwork != nil {
+				networks = append(networks, currentNetwork)
+			}
+			currentNetwork = &Network{}
 		}
-		if match := reSignal.FindStringSubmatch(line); match != nil {
-			wifiConnection.SignalLevel = match[1]
+		if match := networkRegexSSID.FindStringSubmatch(line); match != nil {
+			currentNetwork.ESSID = match[1]
 		}
-		if match := reQuality.FindStringSubmatch(line); match != nil {
-			wifiConnection.LinkQuality = fmt.Sprintf("%s/%s", match[1], match[2])
+		if match := networkRegexSignal.FindStringSubmatch(line); match != nil {
+			currentNetwork.SignalLevel = match[1]
 		}
-		if match := reRetries.FindStringSubmatch(line); match != nil {
-			wifiConnection.TxRetries = match[1]
+		if match := networkRegexQuality.FindStringSubmatch(line); match != nil {
+			currentNetwork.LinkQuality = fmt.Sprintf("%s/%s", match[1], match[2])
 		}
+		if match := networkRegexMAC.FindStringSubmatch(line); match != nil {
+			currentNetwork.MACAddress = match[1]
+		}
+	}
+
+	if currentNetwork != nil {
+		networks = append(networks, currentNetwork)
 	}
 
 	if err := scanner.Err(); err != nil {
 		return nil, err
 	}
 
-	return wifiConnection, nil
+	return networks, nil
 }
